@@ -23,17 +23,21 @@ parser.add_argument("--dataset_dir", default='/home/yang/study/datasetandparam/p
 parser.add_argument("--dataset_name", default='my_cifar-100', type=str, help="Train data set name")
 parser.add_argument("--datalabel_dir", default='/home/yang/study/datasetandparam/parachute', type=str, help="Train data label dir")
 parser.add_argument("--datalabel_name", default='my_cifar-100.txt', type=str, help="Train data label name")
-parser.add_argument("--tfrecord_path", default='/home/yang/study/datasetandparam/parachute/cifar-100_tfrecords', type=str, help="tfrecord dir path")
+parser.add_argument("--tfrecords_dir", default='/home/yang/study/datasetandparam/parachute',
+                    type=str, help="tfrecords_dir")
+parser.add_argument("--tfrecords_name", default='cifar-100_tfrecords',
+                    type=str, help="tfrecords_name")
 parser.add_argument("--log_dir", default='log', type=str, help="Train data label name")
 parser.add_argument("--checkpoint_dir", default='checkpoint', type=str, help="model save dir")
 parser.add_argument("--num_gpus", default=1, type=int, help="num of gpu")
 parser.add_argument("--epoch", default=20, type=int, help="epoch")
-parser.add_argument("--batch_size", default=4, type=int, help="batch size for one gpus")
-parser.add_argument("--lr", default=0.05, type=float, help="learning rate")
+parser.add_argument("--batch_size", default=8, type=int, help="batch size for one gpus")
+parser.add_argument("--lr", default=0.001, type=float, help="learning rate")
 parser.add_argument("--savemodel_period", default=10, type=int, help="savemodel_period")
 parser.add_argument("--add_summary_period", default=10, type=int, help="add_summary_period")
 parser.add_argument("--weight_decay", default=0.0005, type=float, help="weight decay")
 parser.add_argument("--num_classes", default=101, type=int, help="num of classes")
+parser.add_argument("--image_size", default=(224, 224), type=int, help="num of classes")
 
 cfg = parser.parse_args()
 

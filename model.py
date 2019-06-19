@@ -1,8 +1,8 @@
 import tensorflow as tf
 import numpy as np
-import time, cv2
+import time, cv2, datetime, os
 import networks
-from DataSetReader import *
+from DataSetReader import Reader
 
 class SimilarityCompute:
     def __init__(self, sess, cfg):
@@ -10,21 +10,35 @@ class SimilarityCompute:
         self.cfg = cfg
         self.weight_decay = cfg.weight_decay
         self.num_classes = cfg.num_classes
-        self.images = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus, 224, 224, 3],
-                                     name='input_image')
+        self.images = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus,
+                                                              self.cfg.image_size[0], self.cfg.image_size[1], 3],
+                                                name='input_image')
         self.labels = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus, self.num_classes],
                                      name='label')
-
         self.m4_Vgg16 = networks.Vgg16(self.cfg)
         self.is_train = self.cfg.is_train
 
-        self.lr = tf.Variable(self.cfg.lr, name='lr')
-        self.op_t = tf.train.AdamOptimizer(learning_rate=self.lr)
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=True)
+
+        # self.lr = tf.Variable(self.cfg.lr, name='lr')
+        self.lr = self.cfg.lr
+        self.op_t = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=0.0, beta2=0.99, epsilon=1e-8)
+
+        # 读取数据集
+        tensor_file_maker = Reader(self.cfg.tfrecords_dir, self.cfg.tfrecords_name, self.cfg.datalabel_dir,
+                                   self.cfg.datalabel_name,
+                                   self.num_classes, self.cfg.image_size)
+        self.one_element, self.dataset_size = tensor_file_maker.build_dataset(batch_size=self.cfg.batch_size * self.cfg.num_gpus,
+                                                                    epoch=self.cfg.epoch, shuffle_num=10000,
+                                                                    is_train=self.cfg.is_train)
+
+        self.num_step_epoch = self.dataset_size // (self.cfg.batch_size * self.cfg.num_gpus)
 
 
     def train(self):
         prelogits, embedding = self.inference(self.images)
-        logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
+        self.logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
                                     get_vars_name=False, is_trainable=self.is_train,
                                     stddev=0.02, weight_decay=self.weight_decay, name='logits') # 总共多少类， 注：训练时不需要l2正则化
 
@@ -32,20 +46,32 @@ class SimilarityCompute:
         #                                                                logits=logits, name='cross_entropy') # 接softmax，交叉熵
 
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.labels,
-                                                                       logits=logits,
+                                                                       logits=self.logits,
                                                                        name='cross_entropy')  # 接softmax，交叉熵
 
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy_mean')
 
         regularization_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES) # 获取权重的regularization loss，让权重更小，防止过拟合
         self.total_loss = tf.add_n([cross_entropy_mean] + regularization_loss) # 只要在前向cross_entropy_mean损失加上regularization loss即可，
-        self.opt = self.op_t.minimize(self.total_loss)                                                                  # train的时候会自动减小权重
+                                                                               # train的时候会自动减小权重
+
+        loss_sum = tf.summary.scalar('loss', self.total_loss)
+        self.lr = tf.train.exponential_decay(learning_rate=self.cfg.lr, global_step=self.global_step, decay_steps=5 * self.num_step_epoch,
+                                       decay_rate=0.9, staircase=True)
+        vars = tf.trainable_variables()
+
+        grad = self.op_t.compute_gradients(loss=self.total_loss, var_list=vars)
+        self.opt = self.op_t.apply_gradients(grads_and_vars=grad, global_step=self.global_step)
 
 
+
+        # 定义保存模型
         try:
             self.saver = tf.train.Saver()
         except:
             print('one model save error....')
+
+        # 初始化变量
         try:
             tf.global_variables_initializer().run()
         except:
@@ -55,23 +81,47 @@ class SimilarityCompute:
                                                            time.strftime("%Y-%m-%d %H:%M:%S",
                                                                          time.localtime(time.time()))),
                                             self.sess.graph)
-
+        merged = tf.summary.merge_all()
+        # 载入模型
         could_load, counter = self.load(self.cfg.checkpoint_dir, self.cfg.dataset_name)
         if could_load:
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
 
-        tensor_file_maker = Reader(self.cfg.tfrecord_path, self.cfg.datalabel_dir, self.cfg.datalabel_name)
-        one_element, dataset_size = tensor_file_maker.build_dataset(batch_size=self.cfg.batch_size * self.cfg.num_gpus,
-                                                                    epoch=self.cfg.epoch, is_train=self.cfg.is_train)
-        while 1:
-            batch_images, batch_labels = self.sess.run(one_element)
-            batch_labels = np.reshape(batch_labels, (self.cfg.batch_size,self.num_classes))
-            _, loss = self.sess.run([self.opt, self.total_loss],
-                                                   feed_dict={self.images: batch_images,
-                                                              self.labels: batch_labels})
-            print(loss)
+
+
+        self.sess.graph.finalize()
+        for epoch in range(1, self.cfg.epoch + 1):
+            for batch_step in range(1, self.num_step_epoch+1):
+                start_time = datetime.datetime.now()
+                batch_images, batch_labels = self.sess.run(self.one_element)
+                batch_labels = np.reshape(batch_labels, (self.cfg.batch_size, self.num_classes))
+
+                _, loss, counter, lr, output = self.sess.run([self.opt, self.total_loss, self.global_step, self.lr, self.logits],
+                                        feed_dict={self.images: batch_images,
+                                                   self.labels: batch_labels})
+                accuray_count = 0
+                for index_output, index_label in zip(output ,batch_labels):
+                    if index_output.argmax() == index_label.argmax():
+                        accuray_count += 1
+                accuray = accuray_count / self.cfg.batch_size
+
+                if batch_step % self.cfg.add_summary_period == 0:
+                    [merged_] = self.sess.run([merged], feed_dict={self.images: batch_images,
+                                                   self.labels: batch_labels})
+                    self.writer.add_summary(merged_, counter)
+                    print('add summary once....')
+
+                end_time = datetime.datetime.now()
+                timediff = (end_time - start_time).total_seconds()
+                print("Epoch: [%2d/%2d/%4d], time: %3.4f, lr: %.6f accuray: %.4f Loss: %3.4f" % (epoch, batch_step, self.num_step_epoch,
+                                                                                   timediff, lr, accuray, loss))
+
+                # if batch_step % self.cfg.savemodel_period == 0:
+                #     self.save(self.cfg.checkpoint_dir, epoch, self.cfg.dataset_name)
+                #     print('one param model saved....')
+
 
     def test(self):
         print('a')
@@ -99,3 +149,12 @@ class SimilarityCompute:
             print(" [*] Failed to find a checkpoint")
             time.sleep(3)
             return False, 0
+
+    def save(self, checkpoint_dir, step, model_file_name):
+        model_name = "GAN.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, model_file_name)
+
+        # if not os.path.exists(checkpoint_dir):
+        #     os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess, os.path.join(checkpoint_dir, model_name), global_step=step)
