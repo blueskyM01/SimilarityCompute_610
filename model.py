@@ -3,6 +3,7 @@ import numpy as np
 import time, cv2, datetime, os
 import networks
 from DataSetReader import Reader
+from scipy.spatial.distance import pdist
 
 class SimilarityCompute:
     def __init__(self, sess, cfg):
@@ -15,7 +16,7 @@ class SimilarityCompute:
                                                 name='input_image')
         self.labels = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus, self.num_classes],
                                      name='label')
-        self.m4_Vgg16 = networks.ResNet50(self.cfg)
+        self.ResNet18 = networks.ResNet18(self.cfg)
         self.is_train = self.cfg.is_train
 
 
@@ -122,17 +123,59 @@ class SimilarityCompute:
                 print("Epoch: [%2d/%2d/%4d], time: %3.4f, lr: %.6f accuray: %.4f Loss: %3.4f" % (epoch, batch_step, self.num_step_epoch,
                                                                                    timediff, lr, accuray, loss))
 
-                # if batch_step % self.cfg.savemodel_period == 0:
-                #     self.save(self.cfg.checkpoint_dir, epoch, self.cfg.dataset_name)
-                #     print('one param model saved....')
+                if epoch % self.cfg.savemodel_period == 0 and batch_step == 1:
+                    self.save(self.cfg.checkpoint_dir, epoch, self.cfg.dataset_name)
+                    print('one param model saved....')
 
 
     def test(self):
-        print('a')
+        m4_temp = cv2.imread('/home/yang/bird.jpg')
+        m4_img1 = cv2.imread('/home/yang/fish.jpg')
+
+        m4_temp = cv2.resize(m4_temp, (self.cfg.image_size[0], self.cfg.image_size[1]))
+        m4_img1 = cv2.resize(m4_img1, (self.cfg.image_size[0], self.cfg.image_size[1]))
+        m4_temp_f = m4_temp.astype(np.float32) / 127.5 - 1.0
+        m4_img1_f = m4_img1.astype(np.float32) / 127.5 - 1.0
+
+        img1_np = cv2.cvtColor(m4_temp_f, cv2.COLOR_BGR2RGB)
+        img2_np = cv2.cvtColor(m4_img1_f, cv2.COLOR_BGR2RGB)
+
+        images_list = [img1_np, img2_np]
+        images_np = np.array(images_list)
+
+        images = tf.placeholder(dtype=tf.float32, shape=[2, self.cfg.image_size[0], self.cfg.image_size[1], 3],
+                                                name='input_image')
+        prelogits, embedding = self.inference(images)
+
+        # 定义保存模型
+        try:
+            self.saver = tf.train.Saver()
+        except:
+            print('one model save error....')
+
+        # 初始化变量
+        try:
+            tf.global_variables_initializer().run()
+        except:
+            tf.initialize_all_variables().run()
+
+        # 载入模型
+        could_load, counter = self.load(self.cfg.checkpoint_dir, self.cfg.dataset_name)
+        if could_load:
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
+
+        [m4_embedding] = self.sess.run([embedding], feed_dict={images: images_np})
+
+        # print(m4_embedding[0])
+        # print(m4_embedding[1])
+        print(1 - pdist(m4_embedding, 'cosine'))
+
 
     def inference(self, image):
         with tf.variable_scope('similaritycompute610', reuse=False) as scope:
-            prelogits = self.m4_Vgg16.build_model(image)
+            prelogits = self.ResNet18.build_model(image)
             embedding = tf.nn.l2_normalize(prelogits, 1, name='embedding') # 预测时l2正则化，训练时不需要
             return prelogits, embedding
 
