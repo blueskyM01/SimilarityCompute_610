@@ -15,7 +15,7 @@ class SimilarityCompute:
                                                 name='input_image')
         self.labels = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus, self.num_classes],
                                      name='label')
-        self.m4_Vgg16 = networks.Vgg16(self.cfg)
+        self.m4_Vgg16 = networks.ResNet50(self.cfg)
         self.is_train = self.cfg.is_train
 
 
@@ -96,6 +96,10 @@ class SimilarityCompute:
             for batch_step in range(1, self.num_step_epoch+1):
                 start_time = datetime.datetime.now()
                 batch_images, batch_labels = self.sess.run(self.one_element)
+                if batch_images.shape[0] < self.cfg.batch_size:
+                    print(batch_images.shape)
+                    print(batch_labels.shape)
+                    continue
                 batch_labels = np.reshape(batch_labels, (self.cfg.batch_size, self.num_classes))
 
                 _, loss, counter, lr, output = self.sess.run([self.opt, self.total_loss, self.global_step, self.lr, self.logits],

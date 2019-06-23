@@ -78,13 +78,13 @@ class Vgg16:
 
         self.reshape = tf.reshape(self.pool5, [batch, w * h * nc])
 
-        self.fc6 = m4_linear(self.reshape, 1000, active_function='relu', norm=None, get_vars_name=False,
+        self.fc6 = m4_linear(self.reshape, 4096, active_function='relu', norm=None, get_vars_name=False,
                              is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc6')
-        # self.fc7 = m4_linear(self.fc6, 4096, active_function='relu', norm=None, get_vars_name=False,
-        #                      is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc7')
-        # self.fc8 = m4_linear(self.fc7, 4096, active_function=None, norm=None, get_vars_name=False,
-        #                      is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc8')
-        return self.fc6
+        self.fc7 = m4_linear(self.fc6, 4096, active_function='relu', norm=None, get_vars_name=False,
+                             is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc7')
+        self.fc8 = m4_linear(self.fc7, 4096, active_function=None, norm=None, get_vars_name=False,
+                             is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc8')
+        return self.fc8
 
 class Vgg19:
 
