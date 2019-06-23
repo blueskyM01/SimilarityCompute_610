@@ -32,7 +32,7 @@ parser.add_argument("--checkpoint_dir", default='checkpoint', type=str, help="mo
 parser.add_argument("--num_gpus", default=1, type=int, help="num of gpu")
 parser.add_argument("--epoch", default=20, type=int, help="epoch")
 parser.add_argument("--batch_size", default=8, type=int, help="batch size for one gpus")
-parser.add_argument("--lr", default=0.001, type=float, help="learning rate")
+parser.add_argument("--lr", default=0.0005, type=float, help="learning rate")
 parser.add_argument("--savemodel_period", default=10, type=int, help="savemodel_period")
 parser.add_argument("--add_summary_period", default=10, type=int, help="add_summary_period")
 parser.add_argument("--weight_decay", default=0.0005, type=float, help="weight decay")
