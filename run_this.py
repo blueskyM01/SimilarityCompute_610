@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser()
 
 # -----------------------------m4_BE_GAN_network-----------------------------
 parser.add_argument("--gpu_assign", default='1', type=str, help="assign gpu")
-parser.add_argument("--is_train", default=False, type=bool, help="Train")
+parser.add_argument("--is_train", default=True, type=bool, help="Train")
 parser.add_argument("--dataset_dir", default='/media/yang/F/DataSet/parachute', type=str, help="Train data set dir")
 parser.add_argument("--dataset_name", default='my_cifar-100', type=str, help="Train data set name")
 parser.add_argument("--datalabel_dir", default='/media/yang/F/DataSet/parachute', type=str, help="Train data label dir")
@@ -32,7 +32,7 @@ parser.add_argument("--checkpoint_dir", default='/media/yang/F/ubuntu/parachute_
 parser.add_argument("--num_gpus", default=1, type=int, help="num of gpu")
 parser.add_argument("--epoch", default=20, type=int, help="epoch")
 parser.add_argument("--batch_size", default=128, type=int, help="batch size for one gpus")
-parser.add_argument("--lr", default=0.0005, type=float, help="learning rate")
+parser.add_argument("--lr", default=0.00005, type=float, help="learning rate")
 parser.add_argument("--savemodel_period", default=2, type=int, help="savemodel_period")
 parser.add_argument("--add_summary_period", default=20, type=int, help="add_summary_period")
 parser.add_argument("--weight_decay", default=0.0005, type=float, help="weight decay")
