@@ -235,7 +235,7 @@ class ResNet18:
         x = m4_average_pool(x, ks=7, stride=7, padding='SAME', name='average_pool')
         _, w, h, nc = x.get_shape().as_list()
         x = tf.reshape(x, [-1, w * h * nc])
-        self.fc6 = m4_linear(x, 1000, active_function=None, norm=None, get_vars_name=False,
+        self.fc6 = m4_linear(x, 128, active_function=None, norm=None, get_vars_name=False,
                              is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc6')
         return self.fc6
 

@@ -31,7 +31,7 @@ parser.add_argument("--log_dir", default='/media/yang/F/ubuntu/parachute_result/
 parser.add_argument("--checkpoint_dir", default='/media/yang/F/ubuntu/parachute_result/checkpoint', type=str, help="model save dir")
 parser.add_argument("--num_gpus", default=1, type=int, help="num of gpu")
 parser.add_argument("--epoch", default=20, type=int, help="epoch")
-parser.add_argument("--batch_size", default=64, type=int, help="batch size for one gpus")
+parser.add_argument("--batch_size", default=128, type=int, help="batch size for one gpus")
 parser.add_argument("--lr", default=0.0005, type=float, help="learning rate")
 parser.add_argument("--savemodel_period", default=2, type=int, help="savemodel_period")
 parser.add_argument("--add_summary_period", default=20, type=int, help="add_summary_period")

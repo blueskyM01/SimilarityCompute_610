@@ -120,8 +120,8 @@ class SimilarityCompute:
 
                 end_time = datetime.datetime.now()
                 timediff = (end_time - start_time).total_seconds()
-                print("Epoch: [%2d/%2d/%4d], time: %3.4f, lr: %.6f accuray: %.4f Loss: %3.4f" % (epoch, batch_step, self.num_step_epoch,
-                                                                                   timediff, lr, accuray, loss))
+                print("Epoch: [%2d/%2d] [%4d/%4d], time: %3.4f, lr: %.6f accuray: %.4f Loss: %3.4f" %
+                      (epoch, self.cfg.epoch, batch_step, self.num_step_epoch, timediff, lr, accuray, loss))
 
                 if epoch % self.cfg.savemodel_period == 0 and batch_step == 1:
                     self.save(self.cfg.checkpoint_dir, epoch, self.cfg.dataset_name)
@@ -129,8 +129,8 @@ class SimilarityCompute:
 
 
     def test(self):
-        m4_temp = cv2.imread('/home/yang/bird.jpg')
-        m4_img1 = cv2.imread('/home/yang/fish.jpg')
+        m4_temp = cv2.imread('/home/yang/plan2.jpeg')
+        m4_img1 = cv2.imread('/home/yang/plan1.jpg')
 
         m4_temp = cv2.resize(m4_temp, (self.cfg.image_size[0], self.cfg.image_size[1]))
         m4_img1 = cv2.resize(m4_img1, (self.cfg.image_size[0], self.cfg.image_size[1]))
@@ -166,11 +166,15 @@ class SimilarityCompute:
         else:
             print(" [!] Load failed...")
 
-        [m4_embedding] = self.sess.run([embedding], feed_dict={images: images_np})
+        for i in range(10):
+            starttime = time.time()
+            [m4_embedding] = self.sess.run([embedding], feed_dict={images: images_np})
 
-        # print(m4_embedding[0])
-        # print(m4_embedding[1])
-        print(1 - pdist(m4_embedding, 'cosine'))
+            # print(m4_embedding[0])
+            # print(m4_embedding[1])
+            print(1 - pdist(m4_embedding, 'cosine'))
+            endtime = time.time()
+            print(endtime - starttime)
 
 
     def inference(self, image):
