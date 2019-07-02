@@ -295,3 +295,18 @@ def m4_bottle_resblock(input_, fiters, k_h = 3, k_w = 3, s_h = 1, s_w = 1, is_do
             return x, vars
         else:
             return x
+
+
+def m4_average_grads(tower):
+    averaged_grads = []
+    for grads_and_vars in zip(*tower):
+        # print(grads_and_vars)
+        grads = []
+        for g, _ in grads_and_vars:
+            expanded_grad = tf.expand_dims(g, 0, 'expand_grads')
+            grads.append(expanded_grad)
+        grad = tf.concat(values=grads, axis=0)
+        grad = tf.reduce_mean(input_tensor=grad, axis=0, keep_dims=False)
+        g_and_v = (grad, grads_and_vars[0][1])
+        averaged_grads.append(g_and_v)
+    return averaged_grads

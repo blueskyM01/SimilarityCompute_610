@@ -4,6 +4,7 @@ import time, cv2, datetime, os
 import networks
 from DataSetReader import Reader
 from scipy.spatial.distance import pdist
+import ops as my_ops
 
 class SimilarityCompute:
     def __init__(self, sess, cfg):
@@ -20,7 +21,7 @@ class SimilarityCompute:
         self.is_train = self.cfg.is_train
 
 
-        self.global_step = tf.Variable(0, name='global_step', trainable=True)
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
         # self.lr = tf.Variable(self.cfg.lr, name='lr')
         self.lr = self.cfg.lr
@@ -38,31 +39,49 @@ class SimilarityCompute:
 
 
     def train(self):
-        prelogits, embedding = self.inference(self.images)
-        self.logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
-                                    get_vars_name=False, is_trainable=self.is_train,
-                                    stddev=0.02, weight_decay=self.weight_decay, name='logits') # 总共多少类， 注：训练时不需要l2正则化
+        grads = []
+        for i in range(self.cfg.num_gpus):
+            images_on_one_gpu = self.images[self.cfg.batch_size * i:self.cfg.batch_size * (i + 1)]
+            labels_on_one_gpu = self.labels[self.cfg.batch_size * i:self.cfg.batch_size * (i + 1)]
 
-        # cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels,
-        #                                                                logits=logits, name='cross_entropy') # 接softmax，交叉熵
+            with tf.device("/gpu:{}".format(i)):
 
-        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.labels,
-                                                                       logits=self.logits,
-                                                                       name='cross_entropy')  # 接softmax，交叉熵
+                if i == 0:
+                    reuse = False
+                else:
+                    reuse = True
 
-        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy_mean')
 
-        regularization_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES) # 获取权重的regularization loss，让权重更小，防止过拟合
-        self.total_loss = tf.add_n([cross_entropy_mean] + regularization_loss) # 只要在前向cross_entropy_mean损失加上regularization loss即可，
-                                                                               # train的时候会自动减小权重
+                prelogits, embedding = self.inference(images_on_one_gpu, reuse)
+                with tf.variable_scope('Classes_Num', reuse=reuse) as scope:
+                    self.logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
+                                                get_vars_name=False, is_trainable=self.is_train,
+                                                stddev=0.02, weight_decay=self.weight_decay, name='logits') # 总共多少类， 注：训练时不需要l2正则化
 
-        loss_sum = tf.summary.scalar('loss', self.total_loss)
-        self.lr = tf.train.exponential_decay(learning_rate=self.cfg.lr, global_step=self.global_step, decay_steps=5 * self.num_step_epoch,
-                                       decay_rate=0.9, staircase=True)
-        vars = tf.trainable_variables()
+                # cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels,
+                #                                                                logits=logits, name='cross_entropy') # 接softmax，交叉熵
 
-        grad = self.op_t.compute_gradients(loss=self.total_loss, var_list=vars)
-        self.opt = self.op_t.apply_gradients(grads_and_vars=grad, global_step=self.global_step)
+                cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels_on_one_gpu,
+                                                                               logits=self.logits,
+                                                                               name='cross_entropy')  # 接softmax，交叉熵
+
+                cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy_mean')
+
+                regularization_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES) # 获取权重的regularization loss，让权重更小，防止过拟合
+                self.total_loss = tf.add_n([cross_entropy_mean] + regularization_loss) # 只要在前向cross_entropy_mean损失加上regularization loss即可，
+                                                                                       # train的时候会自动减小权重
+
+                loss_sum = tf.summary.scalar('loss', self.total_loss)
+                self.lr = tf.train.exponential_decay(learning_rate=self.cfg.lr, global_step=self.global_step, decay_steps=5 * self.num_step_epoch,
+                                               decay_rate=0.9, staircase=True)
+                vars = tf.trainable_variables()
+
+                grad = self.op_t.compute_gradients(loss=self.total_loss, var_list=vars)
+                print(grad)
+                grads.append(grad)
+            print('Init GPU:{}'.format(i))
+        mean_grads = my_ops.m4_average_grads(grads)
+        self.opt = self.op_t.apply_gradients(grads_and_vars=mean_grads, global_step=self.global_step)
 
 
 
@@ -101,13 +120,13 @@ class SimilarityCompute:
                     print(batch_images.shape)
                     print(batch_labels.shape)
                     continue
-                batch_labels = np.reshape(batch_labels, (self.cfg.batch_size, self.num_classes))
+                batch_labels = np.reshape(batch_labels, (self.cfg.batch_size * self.cfg.num_gpus, self.num_classes))
 
                 _, loss, counter, lr, output = self.sess.run([self.opt, self.total_loss, self.global_step, self.lr, self.logits],
                                         feed_dict={self.images: batch_images,
                                                    self.labels: batch_labels})
                 accuray_count = 0
-                for index_output, index_label in zip(output ,batch_labels):
+                for index_output, index_label in zip(output ,batch_labels[self.cfg.batch_size * (self.cfg.num_gpus-1):self.cfg.batch_size * (self.cfg.num_gpus)]):
                     if index_output.argmax() == index_label.argmax():
                         accuray_count += 1
                 accuray = accuray_count / self.cfg.batch_size
@@ -129,8 +148,8 @@ class SimilarityCompute:
 
 
     def test(self):
-        m4_temp = cv2.imread('/home/yang/plan2.jpeg')
-        m4_img1 = cv2.imread('/home/yang/plan1.jpg')
+        m4_temp = cv2.imread('/home/yang/dcd.png')
+        m4_img1 = cv2.imread('/home/yang/plan2.jpeg')
 
         m4_temp = cv2.resize(m4_temp, (self.cfg.image_size[0], self.cfg.image_size[1]))
         m4_img1 = cv2.resize(m4_img1, (self.cfg.image_size[0], self.cfg.image_size[1]))
@@ -177,8 +196,8 @@ class SimilarityCompute:
             print(endtime - starttime)
 
 
-    def inference(self, image):
-        with tf.variable_scope('similaritycompute610', reuse=False) as scope:
+    def inference(self, image, reuse=False):
+        with tf.variable_scope('similaritycompute610', reuse=reuse) as scope:
             prelogits = self.ResNet18.build_model(image)
             embedding = tf.nn.l2_normalize(prelogits, 1, name='embedding') # 预测时l2正则化，训练时不需要
             return prelogits, embedding
@@ -202,7 +221,7 @@ class SimilarityCompute:
             return False, 0
 
     def save(self, checkpoint_dir, step, model_file_name):
-        model_name = "GAN.model"
+        model_name = "ImageNet.model"
         checkpoint_dir = os.path.join(checkpoint_dir, model_file_name)
 
         # if not os.path.exists(checkpoint_dir):
