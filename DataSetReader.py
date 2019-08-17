@@ -68,11 +68,11 @@ class Reader:
         dataset_size = names.shape[0]
 
         dataset = tf.data.TFRecordDataset(filenames = self.TfrecordFile)
-        dataset = dataset.map(self.parser, num_parallel_calls = 10)
+        dataset = dataset.map(self.parser, num_parallel_calls = 4)
         if is_train:
             dataset = dataset.shuffle(shuffle_num).batch(batch_size).repeat(epoch)
         else:
-            dataset = dataset.batch(batch_size).repeat(epoch)
+            dataset = dataset.batch(batch_size).repeat(1)
         # dataset = dataset.repeat().batch(batch_size).prefetch(batch_size)
         iterator = dataset.make_one_shot_iterator()
         one_element = iterator.get_next()

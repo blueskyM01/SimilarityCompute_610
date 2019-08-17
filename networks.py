@@ -235,7 +235,7 @@ class ResNet18:
         x = m4_average_pool(x, ks=7, stride=7, padding='SAME', name='average_pool')
         _, w, h, nc = x.get_shape().as_list()
         x = tf.reshape(x, [-1, w * h * nc])
-        self.fc6 = m4_linear(x, 256, active_function=None, norm=None, get_vars_name=False,
+        self.fc6 = m4_linear(x, 1024, active_function=None, norm=None, get_vars_name=False,
                              is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='fc6')
         return self.fc6
 
@@ -368,38 +368,38 @@ class ResNet101:
                                       padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
                                       is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='conv1_1')
         x = m4_max_pool(x, ks=3, stride=2, padding='SAME', name='pool1')
-
-        for i in range(residual_list[0]):
-            x = m4_bottle_resblock(x, 64, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=False,
-                        padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
-                        is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock2_' + str(i))
-
-        for i in range(residual_list[1]):
-            if i==0:
-                is_downSample = True
-            else:
-                is_downSample = False
-            x = m4_bottle_resblock(x, 128, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
-                        padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
-                        is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock3_' + str(i))
-
-        for i in range(residual_list[2]):
-            if i==0:
-                is_downSample = True
-            else:
-                is_downSample = False
-            x = m4_bottle_resblock(x, 256, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
-                        padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
-                        is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock4_' + str(i))
-
-        for i in range(residual_list[3]):
-            if i==0:
-                is_downSample = True
-            else:
-                is_downSample = False
-            x = m4_bottle_resblock(x, 512, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
-                        padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
-                        is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock5_' + str(i))
+        with tf.variable_scope('block1') as scope:
+            for i in range(residual_list[0]):
+                x = m4_bottle_resblock(x, 64, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=False,
+                            padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
+                            is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock2_' + str(i))
+        with tf.variable_scope('block2') as scope:
+            for i in range(residual_list[1]):
+                if i==0:
+                    is_downSample = True
+                else:
+                    is_downSample = False
+                x = m4_bottle_resblock(x, 128, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
+                            padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
+                            is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock3_' + str(i))
+        with tf.variable_scope('block3') as scope:
+            for i in range(residual_list[2]):
+                if i==0:
+                    is_downSample = True
+                else:
+                    is_downSample = False
+                x = m4_bottle_resblock(x, 256, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
+                            padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
+                            is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock4_' + str(i))
+        with tf.variable_scope('block4') as scope:
+            for i in range(residual_list[3]):
+                if i==0:
+                    is_downSample = True
+                else:
+                    is_downSample = False
+                x = m4_bottle_resblock(x, 512, k_h=3, k_w=3, s_h=1, s_w=1,is_downsample=is_downSample,
+                            padding="SAME", get_vars_name=False, active_func='relu', norm='batch_norm',
+                            is_trainable=self.is_train, stddev=0.02, weight_decay=self.weight_decay, name='bottle_resblock5_' + str(i))
 
         x = m4_average_pool(x, ks=7, stride=7, padding='SAME', name='average_pool')
         _, w, h, nc = x.get_shape().as_list()

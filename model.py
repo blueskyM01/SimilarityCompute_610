@@ -17,7 +17,7 @@ class SimilarityCompute:
                                                 name='input_image')
         self.labels = tf.placeholder(dtype=tf.float32, shape=[self.cfg.batch_size * self.cfg.num_gpus, self.num_classes],
                                      name='label')
-        self.ResNet18 = networks.ResNet18(self.cfg)
+        self.ResNet18 = networks.ResNet101(self.cfg)
         self.is_train = self.cfg.is_train
 
 
@@ -54,7 +54,7 @@ class SimilarityCompute:
 
                 prelogits, embedding = self.inference(images_on_one_gpu, reuse)
                 with tf.variable_scope('Classes_Num', reuse=reuse) as scope:
-                    self.logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
+                    self.logits = my_ops.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
                                                 get_vars_name=False, is_trainable=self.is_train,
                                                 stddev=0.02, weight_decay=self.weight_decay, name='logits') # 总共多少类， 注：训练时不需要l2正则化
 
@@ -72,8 +72,12 @@ class SimilarityCompute:
                                                                                        # train的时候会自动减小权重
 
                 loss_sum = tf.summary.scalar('loss', self.total_loss)
-                self.lr = tf.train.exponential_decay(learning_rate=self.cfg.lr, global_step=self.global_step, decay_steps=5 * self.num_step_epoch,
-                                               decay_rate=0.9, staircase=True)
+
+                # self.lr = tf.train.exponential_decay(learning_rate=self.cfg.lr, global_step=self.global_step, decay_steps=1.5 * self.num_step_epoch,
+                #                                decay_rate=0.5, staircase=True)
+                self.lr = tf.train.piecewise_constant(self.global_step,
+                                     boundaries=[100, 300, 400, 500],
+                                     values=[0.00001, 0.00001, 0.00001, 0.00001, 0.000005])
                 vars = tf.trainable_variables()
 
                 grad = self.op_t.compute_gradients(loss=self.total_loss, var_list=vars)
@@ -103,7 +107,10 @@ class SimilarityCompute:
                                             self.sess.graph)
         merged = tf.summary.merge_all()
         # 载入模型
-        could_load, counter = self.load(self.cfg.checkpoint_dir, self.cfg.dataset_name)
+        t_vars = tf.trainable_variables()
+        # Init_vars = [var for var in t_vars if 'similaritycompute610' in var.name]
+        Init_saver = tf.train.Saver(t_vars)
+        could_load, counter = self.load(self.cfg.loadModel_dir, self.cfg.loadModel_name, Init_saver)
         if could_load:
             print(" [*] Load SUCCESS")
         else:
@@ -112,11 +119,14 @@ class SimilarityCompute:
 
 
         self.sess.graph.finalize()
-        for epoch in range(1, self.cfg.epoch + 1):
+
+        batch_images_o, batch_labels_o = self.sess.run(self.one_element)
+        accuray_ = 0
+        for epoch in range(10, self.cfg.epoch + 1):
             for batch_step in range(1, self.num_step_epoch+1):
                 start_time = datetime.datetime.now()
                 batch_images, batch_labels = self.sess.run(self.one_element)
-                if batch_images.shape[0] < self.cfg.batch_size:
+                if batch_images.shape[0] < self.cfg.batch_size * self.cfg.num_gpus:
                     print(batch_images.shape)
                     print(batch_labels.shape)
                     continue
@@ -126,7 +136,8 @@ class SimilarityCompute:
                                         feed_dict={self.images: batch_images,
                                                    self.labels: batch_labels})
                 accuray_count = 0
-                for index_output, index_label in zip(output ,batch_labels[self.cfg.batch_size * (self.cfg.num_gpus-1):self.cfg.batch_size * (self.cfg.num_gpus)]):
+                for index_output, index_label in zip(output,
+                                                     batch_labels[self.cfg.batch_size * (self.cfg.num_gpus-1):self.cfg.batch_size * (self.cfg.num_gpus)]):
                     if index_output.argmax() == index_label.argmax():
                         accuray_count += 1
                 accuray = accuray_count / self.cfg.batch_size
@@ -137,10 +148,19 @@ class SimilarityCompute:
                     self.writer.add_summary(merged_, counter)
                     print('add summary once....')
 
+                    [output_] = self.sess.run([self.logits],
+                                           feed_dict={self.images: batch_images_o})
+                    accuray_count = 0
+                    for index_output, index_label in zip(output_, batch_labels_o[self.cfg.batch_size * (
+                            self.cfg.num_gpus - 1):self.cfg.batch_size * (self.cfg.num_gpus)]):
+                        if index_output.argmax() == index_label.argmax():
+                            accuray_count += 1
+                    accuray_ = accuray_count / self.cfg.batch_size
+
                 end_time = datetime.datetime.now()
                 timediff = (end_time - start_time).total_seconds()
-                print("Epoch: [%2d/%2d] [%4d/%4d], time: %3.4f, lr: %.6f accuray: %.4f Loss: %3.4f" %
-                      (epoch, self.cfg.epoch, batch_step, self.num_step_epoch, timediff, lr, accuray, loss))
+                print("Epoch: [%2d/%2d] [%4d/%4d], time: %3.4f, lr: %.8f accuray: %.4f accuray_: %.4f Loss: %3.4f" %
+                      (epoch, self.cfg.epoch, batch_step, self.num_step_epoch, timediff, lr, accuray, accuray_, loss))
 
                 if epoch % self.cfg.savemodel_period == 0 and batch_step == 1:
                     self.save(self.cfg.checkpoint_dir, epoch, self.cfg.dataset_name)
@@ -148,8 +168,8 @@ class SimilarityCompute:
 
 
     def test(self):
-        m4_temp = cv2.imread('/home/yang/dcd.png')
-        m4_img1 = cv2.imread('/home/yang/plan2.jpeg')
+        m4_temp = cv2.imread('/home/yang/fish.jpg')
+        m4_img1 = cv2.imread('/home/yang/bird.jpg')
 
         m4_temp = cv2.resize(m4_temp, (self.cfg.image_size[0], self.cfg.image_size[1]))
         m4_img1 = cv2.resize(m4_img1, (self.cfg.image_size[0], self.cfg.image_size[1]))
@@ -179,7 +199,7 @@ class SimilarityCompute:
             tf.initialize_all_variables().run()
 
         # 载入模型
-        could_load, counter = self.load(self.cfg.checkpoint_dir, self.cfg.dataset_name)
+        could_load, counter = self.load(self.cfg.loadModel_dir, self.cfg.loadModel_name,self.saver)
         if could_load:
             print(" [*] Load SUCCESS")
         else:
@@ -195,6 +215,58 @@ class SimilarityCompute:
             endtime = time.time()
             print(endtime - starttime)
 
+    def test_on_val(self):
+        prelogits, embedding = self.inference(self.images)
+        with tf.variable_scope('Classes_Num') as scope:
+            self.logits = networks.m4_linear(prelogits, self.num_classes, active_function=None, norm=None,
+                                             get_vars_name=False, is_trainable=self.is_train,
+                                             stddev=0.02, weight_decay=self.weight_decay,
+                                             name='logits')  # 总共多少类， 注：训练时不需要l2正则化
+
+        # 定义保存模型
+        try:
+            self.saver = tf.train.Saver()
+        except:
+            print('one model save error....')
+
+        # 初始化变量
+        try:
+            tf.global_variables_initializer().run()
+        except:
+            tf.initialize_all_variables().run()
+
+
+        # 载入模型
+        could_load, counter = self.load(self.cfg.loadModel_dir, self.cfg.loadModel_name, self.saver)
+        if could_load:
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
+
+
+        average_list = []
+        while 1:
+            try:
+                batch_images, batch_labels = self.sess.run(self.one_element)
+                batch_labels = np.reshape(batch_labels, (self.cfg.batch_size * self.cfg.num_gpus, self.num_classes))
+
+                [output] = self.sess.run([self.logits], feed_dict={self.images: batch_images, self.labels: batch_labels})
+                accuray_count = 0
+                for index_output, index_label in zip(output, batch_labels[self.cfg.batch_size * (
+                        self.cfg.num_gpus - 1):self.cfg.batch_size * (self.cfg.num_gpus)]):
+                    if index_output.argmax() == index_label.argmax():
+                        accuray_count += 1
+                accuray = accuray_count / self.cfg.batch_size
+                average_list.append(accuray)
+                print('accuray:', accuray)
+            except:
+
+                average_np = np.mean(np.array(average_list))
+                print('average_accuray:', average_np)
+                break
+
+
+
 
     def inference(self, image, reuse=False):
         with tf.variable_scope('similaritycompute610', reuse=reuse) as scope:
@@ -202,7 +274,7 @@ class SimilarityCompute:
             embedding = tf.nn.l2_normalize(prelogits, 1, name='embedding') # 预测时l2正则化，训练时不需要
             return prelogits, embedding
 
-    def load(self, checkpoint_dir, model_folder_name):
+    def load(self, checkpoint_dir, model_folder_name, saver):
         import re
         print(" [*] Reading checkpoints...")
         checkpoint_dir = os.path.join(checkpoint_dir, model_folder_name)
@@ -210,7 +282,7 @@ class SimilarityCompute:
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
             counter = int(next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
             time.sleep(3)
