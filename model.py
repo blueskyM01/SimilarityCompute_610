@@ -77,7 +77,7 @@ class SimilarityCompute:
                 #                                decay_rate=0.5, staircase=True)
                 self.lr = tf.train.piecewise_constant(self.global_step,
                                      boundaries=[100, 300, 400, 500],
-                                     values=[0.00001, 0.00001, 0.00001, 0.00001, 0.000005])
+                                     values=[0.000005, 0.000005, 0.000005, 0.000005, 0.000005])
                 vars = tf.trainable_variables()
 
                 grad = self.op_t.compute_gradients(loss=self.total_loss, var_list=vars)
@@ -122,7 +122,7 @@ class SimilarityCompute:
 
         batch_images_o, batch_labels_o = self.sess.run(self.one_element)
         accuray_ = 0
-        for epoch in range(10, self.cfg.epoch + 1):
+        for epoch in range(18, self.cfg.epoch + 1):
             for batch_step in range(1, self.num_step_epoch+1):
                 start_time = datetime.datetime.now()
                 batch_images, batch_labels = self.sess.run(self.one_element)

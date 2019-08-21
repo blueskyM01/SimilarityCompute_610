@@ -28,17 +28,17 @@ parser.add_argument("--tfrecords_dir", default='/media/yang/F/DataSet/ImageNet',
 parser.add_argument("--tfrecords_name", default='tfrecords_imagenet',
                     type=str, help="tfrecords_name")
 
-parser.add_argument("--loadModel_dir", default='/media/yang/F/ubuntu/Imagenet/Res101/checkpoint', type=str, help="model save dir")
+parser.add_argument("--loadModel_dir", default='/media/yang/F/ubuntu/Imagenet/Res101CC/checkpoint', type=str, help="model save dir")
 parser.add_argument("--loadModel_name", default='train', type=str, help="model save dir")
-parser.add_argument("--log_dir", default='/media/yang/F/ubuntu/Imagenet/Res101C/log', type=str, help="Train data label name")
-parser.add_argument("--checkpoint_dir", default='/media/yang/F/ubuntu/Imagenet/Res101C/checkpoint', type=str, help="model save dir")
+parser.add_argument("--log_dir", default='/media/yang/F/ubuntu/Imagenet/Res101CC/log', type=str, help="Train data label name")
+parser.add_argument("--checkpoint_dir", default='/media/yang/F/ubuntu/Imagenet/Res101CC/checkpoint', type=str, help="model save dir")
 parser.add_argument("--num_gpus", default=1, type=int, help="num of gpu")
 parser.add_argument("--epoch", default=50, type=int, help="epoch")
 parser.add_argument("--batch_size", default=50, type=int, help="batch size for one gpus")
 parser.add_argument("--lr", default=0.00001, type=float, help="learning rate")
 parser.add_argument("--savemodel_period", default=2, type=int, help="savemodel_period")
 parser.add_argument("--add_summary_period", default=40, type=int, help="add_summary_period")
-parser.add_argument("--weight_decay", default=0.0005, type=float, help="weight decay")
+parser.add_argument("--weight_decay", default=0.0000, type=float, help="weight decay")
 parser.add_argument("--num_classes", default=1000, type=int, help="num of classes")
 parser.add_argument("--image_size", default=(224, 224), type=int, help="num of classes")
 
